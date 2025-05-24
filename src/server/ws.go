@@ -213,3 +213,46 @@ func (w *WSConn) parseFrame(data []byte) ([]byte, []byte, error) {
 		return nil, data, fmt.Errorf("fragmented frames not supported")
 	}
 }
+
+func (w *WSConn) WriteMessage(messageType int, data []byte) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	var frame []byte
+
+	// First byte: FIN bit (1) and opcode (1 = text)
+	finAndOpcode := byte(0x80) | byte(messageType&0x0F)
+	frame = append(frame, finAndOpcode)
+
+	// Second byte: no masking from server to client
+	payloadLen := len(data)
+	if payloadLen <= 125 {
+		frame = append(frame, byte(payloadLen))
+	} else if payloadLen <= 65535 {
+		frame = append(frame, 126)
+		lenBytes := make([]byte, 2)
+		binary.BigEndian.PutUint16(lenBytes, uint16(payloadLen))
+		frame = append(frame, lenBytes...)
+	} else {
+		frame = append(frame, 127)
+		lenBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(lenBytes, uint64(payloadLen))
+		frame = append(frame, lenBytes...)
+	}
+
+	// Add payload
+	frame = append(frame, data...)
+
+	// Write the frame to the socket
+	n, err := unix.Write(w.fd, frame)
+	if err != nil {
+		log.Printf("write error on fd %d: %v", w.fd, err)
+		return err
+	}
+	if n != len(frame) {
+		log.Printf("partial write on fd %d: wrote %d of %d bytes", w.fd, n, len(frame))
+		return fmt.Errorf("partial write")
+	}
+
+	return nil
+}

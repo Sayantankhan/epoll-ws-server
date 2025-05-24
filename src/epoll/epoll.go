@@ -2,6 +2,7 @@ package epoll
 
 import (
 	"fmt"
+	"log"
 	"sync"
 
 	"golang.org/x/sys/unix"
@@ -9,6 +10,7 @@ import (
 
 type ConnHandler interface {
 	Read(fd int) ([]string, error)
+	WriteMessage(messageType int, data []byte) error
 	//Broadcast(msg string)
 	FlushBuffer()
 	Close()
@@ -89,16 +91,15 @@ func (e *Epoll) Remove(fd int) {
 	}
 }
 
-// func (e *Epoll) Broadcast(msg string) {
-// 	e.mu.Lock()
-// 	defer e.mu.Unlock()
+func (e *Epoll) Broadcast(message string) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 
-// 	for _, conn := range e.conns { // conns is map[int]*websocket.Conn
-// 		err := conn.WriteMessage(websocket.TextMessage, []byte(msg))
-// 		if err != nil {
-// 			log.Printf("broadcast error: %v", err)
-// 			conn.Close()
-// 			delete(e.conns, fd) // remove broken connection
-// 		}
-// 	}
-// }
+	for fd, conn := range e.conns {
+		if err := conn.WriteMessage(1, []byte(message)); err != nil {
+			log.Printf("broadcast error to fd %d: %v", fd, err)
+			// You may want to remove the faulty connection:
+			// e.Remove(fd)
+		}
+	}
+}

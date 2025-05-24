@@ -78,7 +78,7 @@ func Serve() {
 
 		final := strings.Join(hashes, " ")
 		log.Printf("final output %s \v", final)
-		//ep.Broadcast(final) // you define this
+		ep.Broadcast(final) // you define this
 
 		// ep.FlushAll()
 	}

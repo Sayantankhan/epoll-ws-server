@@ -8,7 +8,8 @@ import (
 )
 
 type ConnHandler interface {
-	Read(fd int)
+	Read(fd int) ([]string, error)
+	//Broadcast(msg string)
 	FlushBuffer()
 	Close()
 }
@@ -56,14 +57,15 @@ func (e *Epoll) Wait(events []int) ([]int, error) {
 	}
 }
 
-func (e *Epoll) Read(fd int) {
+func (e *Epoll) Read(fd int) ([]string, error) {
 	e.mu.RLock()
 	handler, ok := e.conns[fd]
 	e.mu.RUnlock()
 
 	if ok {
-		handler.Read(fd)
+		return handler.Read(fd)
 	}
+	return nil, fmt.Errorf("Connection handler not found")
 }
 
 func (e *Epoll) FlushAll() {
@@ -86,3 +88,17 @@ func (e *Epoll) Remove(fd int) {
 		delete(e.conns, fd)
 	}
 }
+
+// func (e *Epoll) Broadcast(msg string) {
+// 	e.mu.Lock()
+// 	defer e.mu.Unlock()
+
+// 	for _, conn := range e.conns { // conns is map[int]*websocket.Conn
+// 		err := conn.WriteMessage(websocket.TextMessage, []byte(msg))
+// 		if err != nil {
+// 			log.Printf("broadcast error: %v", err)
+// 			conn.Close()
+// 			delete(e.conns, fd) // remove broken connection
+// 		}
+// 	}
+// }

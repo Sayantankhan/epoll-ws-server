@@ -1,17 +1,21 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"epoll-server/src/epoll"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 )
 
 const (
 	HOST          = "0.0.0.0"
 	PORT          = 9009
-	TICK_INTERVAL = 2000 * time.Millisecond
+	TICK_INTERVAL = 5000 * time.Millisecond
 )
 
 func Serve() {
@@ -40,9 +44,41 @@ func Serve() {
 			log.Printf("epoll wait error: %v", err)
 			continue
 		}
+
+		var hashes []string
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+
 		for _, fd := range fds {
-			go ep.Read(fd)
+			wg.Add(1)
+			go func(fd int) {
+				defer wg.Done()
+				msgs, err := ep.Read(fd)
+				if err != nil || len(msgs) == 0 {
+					return
+				}
+
+				for _, msg := range msgs {
+					fmt.Printf("Full WS message from fd %d: %s\n", fd, msg)
+					hash := sha256.Sum256([]byte(msg))
+					hashStr := hex.EncodeToString(hash[:])
+
+					mu.Lock()
+					hashes = append(hashes, hashStr)
+					mu.Unlock()
+				}
+			}(fd)
 		}
+
+		wg.Wait()
+
+		if len(hashes) == 0 {
+			continue
+		}
+
+		final := strings.Join(hashes, " ")
+		log.Printf("final output %s \v", final)
+		//ep.Broadcast(final) // you define this
 
 		// ep.FlushAll()
 	}

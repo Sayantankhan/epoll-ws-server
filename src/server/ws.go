@@ -26,7 +26,8 @@ type WSConn struct {
 
 var ErrIncompleteFrame = errors.New("incomplete websocket frame")
 
-func (w *WSConn) Read(fd int) {
+func (w *WSConn) Read(fd int) ([]string, error) {
+	var messages []string
 	for {
 		tmp := make([]byte, 1024)
 		n, err := unix.Read(fd, tmp)
@@ -36,12 +37,12 @@ func (w *WSConn) Read(fd int) {
 				break
 			}
 			log.Printf("read error on fd %d: %v", fd, err)
-			return
+			return nil, err
 		}
 		if n == 0 {
 			w.ep.Remove(fd)
 			log.Printf("connection closed on fd %d", fd)
-			return
+			return nil, nil
 		}
 		w.buffer = append(w.buffer, tmp[:n]...)
 	}
@@ -54,19 +55,22 @@ func (w *WSConn) Read(fd int) {
 				break
 			}
 			log.Printf("frame parse error on fd %d: %v", fd, err)
-			return
+			return nil, err
 		}
 		w.buffer = rest
 
 		if msg != nil {
 			// Full message received, handle it
-			fmt.Printf("Full WS message from fd %d: %s\n", fd, string(msg))
+			// fmt.Printf("Full WS message from fd %d: %s\n", fd, string(msg))
 			// TODO: send to game update queue, buffer, or process here
+			messages = append(messages, string(msg))
 		} else {
 			// No full message yet
 			break
 		}
 	}
+
+	return messages, nil
 }
 
 func (w *WSConn) FlushBuffer() {
